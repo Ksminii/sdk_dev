@@ -145,3 +145,64 @@ server/                  # 테스트 서버 (Express, 인메모리 저장)
 __tests__/               # Jest 유닛 테스트
 dist/                    # 빌드 결과 (ESM, CJS, UMD)
 ```
+
+## 수집 이벤트 형식
+
+### 이벤트 타입별 properties
+
+| 타입 | 설명 | properties |
+|------|------|------------|
+| `pageview` | 페이지 진입 | `title`, `referrer`, `path` |
+| `click` | 클릭 | `selector`, `tagName`, `text`, `href`, `x`, `y` |
+| `scroll` | 스크롤 (10% 단위) | `maxDepth`, `direction` |
+| `input` | 입력 (자동 마스킹) | `selector`, `fieldType`, `value` |
+| `custom` | 커스텀 이벤트 | 자유 형식 |
+
+### 이벤트 전송 — `POST /events`
+
+```json
+{
+  "apiKey": "test-key-123",
+  "sentAt": 1742200000000,
+  "events": [
+    {
+      "type": "click",
+      "timestamp": 1742200000000,
+      "sessionId": "019cfb3e-xxxx-7xxx-xxxx-xxxxxxxxxxxx",
+      "url": "https://example.com/landing",
+      "properties": {
+        "selector": ".btn-cta",
+        "tagName": "BUTTON",
+        "text": "Get Started",
+        "x": 400,
+        "y": 520
+      }
+    }
+  ]
+}
+```
+
+### 세션 리플레이 전송 — `POST /events/recordings`
+
+```json
+{
+  "apiKey": "test-key-123",
+  "sessionId": "019cfb3e-xxxx-7xxx-xxxx-xxxxxxxxxxxx",
+  "sentAt": 1742200000000,
+  "events": [ ]
+}
+```
+
+> `events`에는 rrweb가 생성한 DOM 스냅샷/변경 이벤트가 들어간다.
+
+### 전송 방식
+
+- 기본: `fetch` POST (JSON, `keepalive: true`)
+- 페이지 이탈 시: `sendBeacon` fallback
+- 배치 전송: 기본 3초 간격 또는 큐 20개 차면 즉시
+
+### 협의 필요 사항
+
+- 인증 방식 — 현재 body의 `apiKey`로 전달. 헤더 또는 토큰 기반으로 변경 가능
+- 응답 형식 — 현재 `{ "status": "ok" }`만 기대
+- 리플레이 저장소 — rrweb 이벤트는 세션당 수 MB 이상 될 수 있음
