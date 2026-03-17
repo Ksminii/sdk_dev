@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+.claude/
+*.tgz
+.DS_Store
+*.log
+
+# Local only
+server/
+계획서/
+docs/
