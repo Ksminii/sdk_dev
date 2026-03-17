@@ -6,6 +6,5 @@ coverage/
 *.log
 
 # Local only
-server/
 계획서/
 docs/

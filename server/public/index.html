@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Landing Analytics Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/style.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+    .header { background: #1a3c6e; color: white; padding: 20px 32px; }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header p { font-size: 13px; opacity: 0.7; margin-top: 4px; }
+    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-card .label { font-size: 12px; color: #888; text-transform: uppercase; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #1a3c6e; }
+    .tabs { display: flex; gap: 0; margin-bottom: 0; }
+    .tab { padding: 10px 24px; background: #e0e0e0; border: none; cursor: pointer; font-size: 14px; border-radius: 8px 8px 0 0; }
+    .tab.active { background: white; font-weight: 600; }
+    .panel { background: white; border-radius: 0 8px 8px 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); min-height: 300px; }
+    .hidden { display: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e0e0e0; color: #666; font-size: 11px; text-transform: uppercase; }
+    td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+    tr:hover { background: #f8f8ff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-click { background: #e3f2fd; color: #1565c0; }
+    .badge-pageview { background: #e8f5e9; color: #2e7d32; }
+    .badge-scroll { background: #fff3e0; color: #e65100; }
+    .badge-input { background: #fce4ec; color: #c62828; }
+    .badge-custom { background: #f3e5f5; color: #6a1b9a; }
+    .session-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .session-info { flex: 1; }
+    .session-id { font-family: monospace; font-size: 13px; color: #666; }
+    .session-meta { font-size: 12px; color: #999; margin-top: 4px; }
+    .btn { padding: 6px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+    .btn-primary { background: #1a3c6e; color: white; }
+    .btn-danger { background: #c62828; color: white; }
+    .btn:hover { opacity: 0.9; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    #replay-container { display: flex; justify-content: center; padding: 20px; }
+    .empty { text-align: center; padding: 60px; color: #999; }
+    .props { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; font-size: 11px; color: #888; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Landing Analytics Dashboard</h1>
+    <p>Test Server — Real-time event monitoring</p>
+  </div>
+
+  <div class="container">
+    <div class="stats" id="stats">
+      <div class="stat-card"><div class="label">Total Events</div><div class="value" id="stat-events">-</div></div>
+      <div class="stat-card"><div class="label">Sessions</div><div class="value" id="stat-sessions">-</div></div>
+      <div class="stat-card"><div class="label">Clicks</div><div class="value" id="stat-clicks">-</div></div>
+      <div class="stat-card"><div class="label">Pageviews</div><div class="value" id="stat-pageviews">-</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('events')">Events</button>
+      <button class="tab" onclick="showTab('sessions')">Sessions</button>
+      <button class="tab" onclick="showTab('replay')">Replay</button>
+    </div>
+
+    <div class="panel" id="panel-events">
+      <div class="toolbar">
+        <span id="event-count"></span>
+        <button class="btn btn-danger" onclick="resetData()">Clear All</button>
+      </div>
+      <table>
+        <thead><tr><th>Type</th><th>Time</th><th>Session</th><th>URL</th><th>Properties</th></tr></thead>
+        <tbody id="events-body"></tbody>
+      </table>
+      <div class="empty" id="events-empty">No events yet. Open test.html to generate events.</div>
+    </div>
+
+    <div class="panel hidden" id="panel-sessions">
+      <div id="sessions-list"></div>
+      <div class="empty" id="sessions-empty">No sessions yet.</div>
+    </div>
+
+    <div class="panel hidden" id="panel-replay">
+      <div id="replay-container">
+        <div class="empty">Select a session from the Sessions tab to replay.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/rrweb-player@latest/dist/index.js"></script>
+  <script>
+    let autoRefresh = null;
+
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', ['events', 'sessions', 'replay'][i] === name);
+      });
+      ['events', 'sessions', 'replay'].forEach(n => {
+        document.getElementById('panel-' + n).classList.toggle('hidden', n !== name);
+      });
+    }
+
+    function badge(type) {
+      return '<span class="badge badge-' + type + '">' + type + '</span>';
+    }
+
+    function timeStr(ts) {
+      return new Date(ts).toLocaleTimeString('ko-KR');
+    }
+
+    async function loadEvents() {
+      const res = await fetch('/events');
+      const data = await res.json();
+      const tbody = document.getElementById('events-body');
+      const empty = document.getElementById('events-empty');
+
+      document.getElementById('stat-events').textContent = data.count;
+      document.getElementById('stat-clicks').textContent = data.events.filter(e => e.type === 'click').length;
+      document.getElementById('stat-pageviews').textContent = data.events.filter(e => e.type === 'pageview').length;
+
+      if (data.count === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      document.getElementById('event-count').textContent = data.count + ' events';
+
+      tbody.innerHTML = data.events.slice().reverse().slice(0, 100).map(e =>
+        '<tr>' +
+        '<td>' + badge(e.type) + '</td>' +
+        '<td>' + timeStr(e.timestamp) + '</td>' +
+        '<td class="session-id">' + (e.sessionId || '').slice(0, 8) + '...</td>' +
+        '<td>' + (e.url || '').replace(/https?:\/\/[^/]+/, '') + '</td>' +
+        '<td class="props">' + JSON.stringify(e.properties) + '</td>' +
+        '</tr>'
+      ).join('');
+    }
+
+    async function loadSessions() {
+      const res = await fetch('/sessions');
+      const data = await res.json();
+      const list = document.getElementById('sessions-list');
+      const empty = document.getElementById('sessions-empty');
+
+      document.getElementById('stat-sessions').textContent = data.count;
+
+      if (data.count === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+
+      list.innerHTML = data.sessions.map(s =>
+        '<div class="session-card">' +
+        '  <div class="session-info">' +
+        '    <div class="session-id">' + s.sessionId + '</div>' +
+        '    <div class="session-meta">' + s.eventCount + ' events | ' +
+              Object.entries(s.types).map(([k,v]) => k + ': ' + v).join(', ') +
+              ' | ' + timeStr(s.firstEvent) + ' ~ ' + timeStr(s.lastEvent) +
+        '    </div>' +
+        '  </div>' +
+        (s.hasRecording ?
+          '  <button class="btn btn-primary" onclick="loadReplay(\'' + s.sessionId + '\')">Replay</button>' :
+          '  <span style="color:#999;font-size:12px">No recording</span>') +
+        '</div>'
+      ).join('');
+    }
+
+    async function loadReplay(sessionId) {
+      showTab('replay');
+      const container = document.getElementById('replay-container');
+      container.innerHTML = '<p>Loading replay...</p>';
+
+      const res = await fetch('/sessions/' + sessionId + '/replay');
+      if (!res.ok) {
+        container.innerHTML = '<div class="empty">No recording data for this session.</div>';
+        return;
+      }
+      const data = await res.json();
+      if (data.events.length < 2) {
+        container.innerHTML = '<div class="empty">Not enough recording events for replay (need at least 2).</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      new rrwebPlayer({
+        target: container,
+        props: { events: data.events, width: 800, height: 500 },
+      });
+    }
+
+    async function resetData() {
+      if (!confirm('Clear all collected data?')) return;
+      await fetch('/reset', { method: 'DELETE' });
+      loadEvents();
+      loadSessions();
+    }
+
+    // Auto-refresh every 2 seconds
+    function startAutoRefresh() {
+      loadEvents();
+      loadSessions();
+      autoRefresh = setInterval(() => {
+        loadEvents();
+        loadSessions();
+      }, 2000);
+    }
+
+    startAutoRefresh();
+  </script>
+</body>
+</html>
