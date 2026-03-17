@@ -88,6 +88,37 @@ npm start
 | GET | `/sessions/:id/replay` | 리플레이 데이터 조회 |
 | DELETE | `/reset` | 전체 데이터 초기화 |
 
+## 로컬 테스트 방법
+
+### 최초 1회 (의존성 설치)
+
+```bash
+npm install
+cd server && npm install
+```
+
+### 테스트 실행 순서
+
+```bash
+# 1. SDK 빌드
+npm run build
+
+# 2. 서버 시작 (별도 터미널에서)
+cd server && node index.js
+
+# 3. test.html을 브라우저에서 열기
+open test.html
+
+# 4. 대시보드에서 이벤트 확인
+#    http://localhost:3000
+```
+
+### 코드 수정 후 재테스트
+
+- SDK 코드(`src/`) 수정 → `npm run build` 후 test.html 새로고침
+- 대시보드(`server/public/index.html`) 수정 → 대시보드 새로고침만 하면 됨
+- 서버(`server/index.js`) 수정 → 서버 재시작 (`Ctrl+C` 후 `node index.js`)
+
 ## 데모
 
 `test.html`을 브라우저에서 열면 SDK 동작을 확인할 수 있다.

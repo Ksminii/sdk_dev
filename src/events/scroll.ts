@@ -7,6 +7,7 @@ export class ScrollCapture implements EventCaptureModule {
   private getSessionId: () => string;
   private maxDepth = 0;
   private lastReportedMilestone = 0;
+  private lastScrollTop = 0;
   private throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(emit: (event: AnalyticsEvent) => void, getSessionId: () => string) {
@@ -57,6 +58,17 @@ export class ScrollCapture implements EventCaptureModule {
     );
 
     if (docHeight <= viewportHeight) return; // No scrollable content
+
+    // Reset tracking when user scrolls back up significantly (20%+ of page)
+    const scrollDelta = this.lastScrollTop - scrollTop;
+    const resetThreshold = docHeight * 0.2;
+    if (scrollDelta > resetThreshold) {
+      const currentDepth = Math.min(Math.round(((scrollTop + viewportHeight) / docHeight) * 100), 100);
+      this.maxDepth = currentDepth;
+      this.lastReportedMilestone = Math.floor(currentDepth / 10) * 10;
+      debug('Scroll tracking reset (scrolled up)');
+    }
+    this.lastScrollTop = scrollTop;
 
     const depth = Math.min(Math.round(((scrollTop + viewportHeight) / docHeight) * 100), 100);
 
