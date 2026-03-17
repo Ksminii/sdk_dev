@@ -5,10 +5,8 @@ export class ScrollCapture implements EventCaptureModule {
   private handler: (() => void) | null = null;
   private emit: (event: AnalyticsEvent) => void;
   private getSessionId: () => string;
-  private maxDepth = 0;
-  private lastReportedMilestone = 0;
-  private lastScrollTop = 0;
-  private throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastReportedMilestone = -1;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(emit: (event: AnalyticsEvent) => void, getSessionId: () => string) {
     this.emit = emit;
@@ -17,21 +15,18 @@ export class ScrollCapture implements EventCaptureModule {
 
   start(): void {
     this.handler = () => {
-      // Always update depth immediately
-      this.checkDepth();
-
-      // Trailing: schedule one more check after scrolling stops
-      if (this.throttleTimer) clearTimeout(this.throttleTimer);
-      this.throttleTimer = setTimeout(() => {
-        this.throttleTimer = null;
-        this.checkDepth();
-      }, 200);
+      // Debounce: emit when scrolling stops (300ms)
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        this.checkAndEmit();
+      }, 300);
     };
 
     window.addEventListener('scroll', this.handler, { passive: true });
 
     // Check initial depth after page load
-    setTimeout(() => this.checkDepth(), 500);
+    setTimeout(() => this.checkAndEmit(), 500);
   }
 
   stop(): void {
@@ -39,17 +34,15 @@ export class ScrollCapture implements EventCaptureModule {
       window.removeEventListener('scroll', this.handler);
       this.handler = null;
     }
-    if (this.throttleTimer) {
-      clearTimeout(this.throttleTimer);
-      this.throttleTimer = null;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
-    // Emit final depth if not yet reported
-    if (this.maxDepth > this.lastReportedMilestone) {
-      this.emitScroll();
-    }
+    // Emit final depth
+    this.checkAndEmit();
   }
 
-  private checkDepth(): void {
+  private checkAndEmit(): void {
     const scrollTop = window.scrollY || document.documentElement.scrollTop;
     const viewportHeight = window.innerHeight;
     const docHeight = Math.max(
@@ -57,36 +50,21 @@ export class ScrollCapture implements EventCaptureModule {
       document.body.scrollHeight,
     );
 
-    if (docHeight <= viewportHeight) return; // No scrollable content
-
-    // Reset tracking when user scrolls back up significantly (20%+ of page)
-    const scrollDelta = this.lastScrollTop - scrollTop;
-    const resetThreshold = docHeight * 0.2;
-    if (scrollDelta > resetThreshold) {
-      const currentDepth = Math.min(Math.round(((scrollTop + viewportHeight) / docHeight) * 100), 100);
-      this.maxDepth = currentDepth;
-      this.lastReportedMilestone = Math.floor(currentDepth / 10) * 10;
-      debug('Scroll tracking reset (scrolled up)');
-    }
-    this.lastScrollTop = scrollTop;
+    if (docHeight <= viewportHeight) return;
 
     const depth = Math.min(Math.round(((scrollTop + viewportHeight) / docHeight) * 100), 100);
+    const milestone = Math.floor(depth / 10) * 10;
 
-    if (depth > this.maxDepth) {
-      this.maxDepth = depth;
-    }
-
-    // Report at 10% increments for finer tracking
-    const milestone = Math.floor(this.maxDepth / 10) * 10;
-    if (milestone > this.lastReportedMilestone && milestone > 0) {
+    // Emit whenever the current milestone differs from last reported
+    if (milestone !== this.lastReportedMilestone && milestone > 0) {
       this.lastReportedMilestone = milestone;
-      this.emitScroll();
+      this.emitScroll(depth);
     }
   }
 
-  private emitScroll(): void {
+  private emitScroll(depth: number): void {
     const properties: ScrollProperties = {
-      maxDepth: this.maxDepth,
+      maxDepth: depth,
       direction: 'down',
     };
 
@@ -98,7 +76,7 @@ export class ScrollCapture implements EventCaptureModule {
       properties: properties as unknown as Record<string, unknown>,
     };
 
-    debug('Scroll depth', this.maxDepth + '%');
+    debug('Scroll depth', depth + '%');
     this.emit(event);
   }
 }

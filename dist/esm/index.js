@@ -349,38 +349,35 @@ class PageviewCapture {
 class ScrollCapture {
   constructor(emit, getSessionId) {
     this.handler = null;
-    this.maxDepth = 0;
-    this.lastReportedMilestone = 0;
-    this.throttleTimer = null;
+    this.lastReportedMilestone = -1;
+    this.debounceTimer = null;
     this.emit = emit;
     this.getSessionId = getSessionId;
   }
   start() {
     this.handler = () => {
-      if (this.throttleTimer)
-        return;
-      this.throttleTimer = setTimeout(() => {
-        this.throttleTimer = null;
-        this.checkDepth();
+      if (this.debounceTimer)
+        clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        this.checkAndEmit();
       }, 300);
     };
     window.addEventListener("scroll", this.handler, { passive: true });
-    setTimeout(() => this.checkDepth(), 500);
+    setTimeout(() => this.checkAndEmit(), 500);
   }
   stop() {
     if (this.handler) {
       window.removeEventListener("scroll", this.handler);
       this.handler = null;
     }
-    if (this.throttleTimer) {
-      clearTimeout(this.throttleTimer);
-      this.throttleTimer = null;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
-    if (this.maxDepth > this.lastReportedMilestone) {
-      this.emitScroll();
-    }
+    this.checkAndEmit();
   }
-  checkDepth() {
+  checkAndEmit() {
     const scrollTop = window.scrollY || document.documentElement.scrollTop;
     const viewportHeight = window.innerHeight;
     const docHeight = Math.max(
@@ -390,18 +387,15 @@ class ScrollCapture {
     if (docHeight <= viewportHeight)
       return;
     const depth = Math.min(Math.round((scrollTop + viewportHeight) / docHeight * 100), 100);
-    if (depth > this.maxDepth) {
-      this.maxDepth = depth;
-    }
-    const milestone = Math.floor(this.maxDepth / 10) * 10;
-    if (milestone > this.lastReportedMilestone && milestone > 0) {
+    const milestone = Math.floor(depth / 10) * 10;
+    if (milestone !== this.lastReportedMilestone && milestone > 0) {
       this.lastReportedMilestone = milestone;
-      this.emitScroll();
+      this.emitScroll(depth);
     }
   }
-  emitScroll() {
+  emitScroll(depth) {
     const properties = {
-      maxDepth: this.maxDepth,
+      maxDepth: depth,
       direction: "down"
     };
     const event = {
@@ -411,7 +405,7 @@ class ScrollCapture {
       url: window.location.href,
       properties
     };
-    debug("Scroll depth", this.maxDepth + "%");
+    debug("Scroll depth", depth + "%");
     this.emit(event);
   }
 }
