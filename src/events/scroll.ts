@@ -16,11 +16,15 @@ export class ScrollCapture implements EventCaptureModule {
 
   start(): void {
     this.handler = () => {
-      if (this.throttleTimer) return;
+      // Always update depth immediately
+      this.checkDepth();
+
+      // Trailing: schedule one more check after scrolling stops
+      if (this.throttleTimer) clearTimeout(this.throttleTimer);
       this.throttleTimer = setTimeout(() => {
         this.throttleTimer = null;
         this.checkDepth();
-      }, 300);
+      }, 200);
     };
 
     window.addEventListener('scroll', this.handler, { passive: true });
